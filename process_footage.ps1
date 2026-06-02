@@ -13,6 +13,8 @@ Input layout:
       ...
 
 Behavior (per date folder):
+  -) With -SkipExisting, a date that already has a merged route in gpx_day\ is skipped
+     entirely (resume a run / process only new dates).
   0) Unless -KeepExisting is set, wipes that date's previous output (.gpx and
      *_results.json in gpx_raw\ and gpx_day\) first, so re-runs leave no stale files.
   1) Runs gopro_telemetry.ps1 on the date folder to extract per-video GPX files into:
@@ -76,6 +78,12 @@ param(
   # duplicate files. Use -KeepExisting to leave old output in place instead (files with
   # the same name are still overwritten). The ExifTool cache (.tools\) is never removed.
   [switch] $KeepExisting,
+
+  # Skip any date that already has a merged route in its gpx_day\ folder, moving on to
+  # the next date. Use this to resume a large run and process only NEW dates, without
+  # redoing days that are already done. (-KeepExisting controls cleanup of dates that
+  # ARE processed; -SkipExisting decides whether a date is processed at all.)
+  [switch] $SkipExisting,
 
   # Recommended: trims early GPS warmup junk within each MP4's GPX extraction
   [switch] $TrimWarmup = $true
@@ -157,6 +165,28 @@ foreach ($dayDir in $dateFolders) {
   $dayOut  = Join-Path $outRoot $dayName
   $rawOut  = Join-Path $dayOut "gpx_raw"
   $dayGpxOut = Join-Path $dayOut "gpx_day"
+
+  # -SkipExisting: if this date already has a merged route, skip it and move on.
+  if ($SkipExisting -and (Test-Path -LiteralPath $dayGpxOut)) {
+    $existingMerged = @(Get-ChildItem -LiteralPath $dayGpxOut -File -Filter "*.gpx" -ErrorAction SilentlyContinue)
+    if ($existingMerged.Count -gt 0) {
+      Write-Host ("  {0}: already processed ({1} ride(s)) -- skipping" -f $dayName, $existingMerged.Count) -ForegroundColor DarkGray
+      $items.Add([pscustomobject]@{
+        dayFolder = $dayDir
+        outFolder = $dayOut
+        rawGpxFolder = $rawOut
+        dayGpxFolder = $dayGpxOut
+        telemetryResultsJson = $null
+        mergeResultsJson = $null
+        rawGpxCount = 0
+        mergedGpxCount = $existingMerged.Count
+        mergedGpxFiles = @($existingMerged | ForEach-Object { $_.FullName })
+        status = "skipped"
+        error = $null
+      }) | Out-Null
+      continue
+    }
+  }
 
   Ensure-Dir $dayOut
   Ensure-Dir $rawOut

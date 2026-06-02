@@ -93,8 +93,20 @@ into one GPX route per ride.
 output (the `.gpx` and `*_results.json` files in its `gpx_raw\` and `gpx_day\`) is
 wiped, so re-running never leaves stale or duplicate route files behind. Only dates
 included in the current run are touched, and the ExifTool cache (`.tools\`) is kept.
-Pass `-KeepExisting` to leave old output in place instead (same-named files are still
-overwritten).
+
+Two switches control re-run behavior — they answer *different* questions:
+
+| Switch | Question | Effect |
+| --- | --- | --- |
+| *(default)* | — | Wipe the date's old output, then re-process it. |
+| `-KeepExisting` | *Clean before processing, or not?* | Still re-processes the date, but does **not** wipe first (same-named files are overwritten; renamed ones may pile up). |
+| `-SkipExisting` | *Process this date at all?* | If the date already has a merged route in `gpx_day\`, **skip it entirely** and move to the next date — nothing is re-extracted. |
+
+Use **`-SkipExisting`** to resume a big run and only do the new dates (fast — finished
+days are skipped without re-scanning). Use **`-KeepExisting`** when you do want to
+re-process a date but keep whatever's already in its folders. They're independent: with
+both set, an already-done date is skipped; a not-yet-done date is processed without a
+pre-wipe.
 
 **Expected input layout** — footage organized into `MM-DD-YYYY` date folders:
 
@@ -147,7 +159,8 @@ Tunable via `-MaxGapSeconds` / `-MinGapSeconds` / `-MaxGapMeters`.
 | `-TelemetryScript` | sibling `gopro_telemetry.ps1` | Override path to the extractor. |
 | `-MergeScript` | sibling `merge_gpxs.ps1` | Override path to the merger. |
 | `-RecurseVideos` | off | Search subfolders inside each date folder for videos. |
-| `-KeepExisting` | off (re-runs are clean) | Leave each date's previous output in place instead of wiping it first. |
+| `-KeepExisting` | off (re-runs are clean) | Re-process the date but don't wipe its previous output first. |
+| `-SkipExisting` | off | Skip any date that already has a merged route in `gpx_day\` (process only new dates). |
 | `-MaxGapSeconds` | `3600` | Time gap (1 h) that always starts a new ride. |
 | `-MinGapSeconds` | `120` | Minimum pause (2 min) before a "moved away" split applies. |
 | `-MaxGapMeters` | `500` | Resume-distance after a pause that starts a new ride. |
