@@ -1,0 +1,9 @@
+# Generated output
+gpxs/
+gpx_out/
+merged/
+
+# Auto-downloaded ExifTool cache
+**/.tools/
+
+debug.log
