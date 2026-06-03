@@ -141,12 +141,13 @@ recording into ~4 GB chapters (`GX01..`, `GX02..` with the *same* trailing numbe
 that have no gap between them, while a *new* recording (different trailing number)
 started later in the day is a separate ride.
 
-The orchestrator detects this automatically using both a time and a location test
-(same logic as `merge_gpxs.ps1`, described below): chapters of one recording merge
-into a single route; a **stop during a ride** (you resume in place) stays one ride;
-and a **separate ride** (a long time gap, or you restart somewhere far away) becomes
-its own `merged_route_*.gpx`. So a day with a morning and an evening ride produces
-two route files in that date's `gpx_day\` — even if one of them had a mid-ride stop.
+The orchestrator detects this automatically (same logic as `merge_gpxs.ps1`, described
+below): the chapters of a single recording (same file number) are always kept together
+as one ride — even if GPS cleaning left a gap at a chapter boundary; a **stop during a
+ride** (you resume in place) stays one ride; and a **separate ride** (a long time gap,
+or starting a *new* recording somewhere far away) becomes its own `merged_route_*.gpx`.
+So a day with a morning and an evening ride produces two route files in that date's
+`gpx_day\` — even if one of them was a multi-chapter recording with a mid-ride stop.
 Tunable via `-MaxGapSeconds` / `-MinGapSeconds` / `-MaxGapMeters`.
 
 **Parameters:**
@@ -241,16 +242,22 @@ Pass `-NoClean` to disable it and write the raw track, or tune `-MaxDop` /
 .\merge_gpxs.ps1 -InDir .\gpx_out -OutDir .\merged
 ```
 
-It sorts the GPX files by their first timestamp and starts a **new session (ride)**
-using both a time and a location test, so a stop *during* a ride doesn't split it
-but a genuinely separate ride does. A new session starts when:
-- the next track starts before the previous ends (out of order), **or**
-- the time gap exceeds `-MaxGapSeconds` (always — a long gap is a new ride), **or**
-- you paused longer than `-MinGapSeconds` **and** resumed more than `-MaxGapMeters`
-  from where you stopped.
+It sorts the GPX files by their first timestamp and groups them into rides:
 
-So a 25-minute coffee stop where you resume in place stays one ride, while the
-afternoon and evening rides (hours apart) become two.
+1. **Chapters of the same GoPro recording are always kept together.** GoPro splits one
+   continuous recording into ~4 GB chapters that share the same file number
+   (`GX01`**`0487`**, `GX02`**`0487`**, `GX03`**`0487`** …). These are seamless, so they
+   are never split — even if GPS cleaning left a gap at a chapter boundary (a dropout
+   mid-ride can otherwise look like a "paused and moved away").
+2. **Between different recordings**, a new session (ride) starts when:
+   - the next track starts before the previous ends (out of order), **or**
+   - the time gap exceeds `-MaxGapSeconds` (always — a long gap is a new ride), **or**
+   - you paused longer than `-MinGapSeconds` **and** resumed more than `-MaxGapMeters`
+     from where you stopped.
+
+So a 25-minute coffee stop where you resume in place stays one ride, the afternoon and
+evening rides (hours apart) become two, and the chapters of a single long recording
+always stay as one ride.
 
 **Outputs (in `-OutDir`):**
 - `merged_route_YYYYMMDD_HHMMSS_sessionNN.gpx` — one file per detected ride.

@@ -54,6 +54,16 @@ function Resolve-OutDir([string]$outDir) {
   return (Resolve-Path -LiteralPath $InDir).Path
 }
 
+function Get-RecordingId([string]$path) {
+  # GoPro chaptering: GX01NNNN / GH01NNNN = prefix + 2-digit chapter + 4-digit file
+  # number. Chapters of ONE continuous recording share the prefix + file number (only
+  # the chapter digits change). Return e.g. "GX0487" so same-recording chapters compare
+  # equal; return $null for non-GoPro names (falls back to the gap-based logic).
+  $base = [IO.Path]::GetFileNameWithoutExtension($path)
+  if ($base -match '^(G[A-Z])\d{2}(\d{4})$') { return ($matches[1] + $matches[2]) }
+  return $null
+}
+
 function HaversineMeters([double]$lat1, [double]$lon1, [double]$lat2, [double]$lon2) {
   $R = 6371000.0
   $dLat = ([Math]::PI / 180.0) * ($lat2 - $lat1)
@@ -231,11 +241,22 @@ for ($i=1; $i -lt $valid.Length; $i++) {
   $gapSec = [double]($next.startTime - $prev.endTime).TotalSeconds
   $gapM = HaversineMeters $prev.endLat $prev.endLon $next.startLat $next.startLon
 
-  # New ride if: out of order, OR a long time gap (always), OR a real pause where you
-  # also moved away from where you stopped (time AND location differential together).
-  $newSession = ($gapSec -lt -5) -or
-                ($gapSec -gt $MaxGapSeconds) -or
-                (($gapSec -gt $MinGapSeconds) -and ($gapM -gt $MaxGapMeters))
+  # GoPro splits ONE continuous recording into ~4GB chapters that share the same file
+  # number (e.g. GX01_0487_, GX02_0487_, GX03_0487_). Those are seamless, so they must
+  # never be split -- even if GPS cleaning left a gap at a chapter boundary (a dropout
+  # mid-ride can look like a "paused and moved away"). Only DIFFERENT recordings are
+  # candidates for a new ride.
+  $recPrev = Get-RecordingId $prev.path
+  $recNext = Get-RecordingId $next.path
+  $sameRecording = ($null -ne $recPrev) -and ($recPrev -eq $recNext)
+
+  # New ride only when it's a different recording AND: out of order, OR a long time gap
+  # (always), OR a real pause where you also moved away (time AND location together).
+  $newSession = (-not $sameRecording) -and (
+                  ($gapSec -lt -5) -or
+                  ($gapSec -gt $MaxGapSeconds) -or
+                  (($gapSec -gt $MinGapSeconds) -and ($gapM -gt $MaxGapMeters))
+                )
 
   if ($newSession) {
     $sessions.Add(@($current.ToArray())) | Out-Null
