@@ -21,11 +21,11 @@ Behavior (per date folder):
        <OutRoot>\<date>\gpx_raw\
   2) Merges the day's tracks into one GPX PER RIDE using merge_gpxs.ps1, writing to:
        <OutRoot>\<date>\gpx_day\
-     A "ride" is a run of footage with no large gap; a new ride starts when the
-     time gap exceeds -MaxGapSeconds OR the distance gap exceeds -MaxGapMeters.
-     GoPro splits one recording into ~4GB chapters (GX01.., GX02.., same number) with
-     no gap, so those stay in one ride; separate recordings taken hours apart become
-     separate rides (e.g. a date with morning/afternoon/evening rides -> 3 GPX files).
+     Chapters of one GoPro recording (GX01.., GX02.., same file number) always stay in
+     one ride. Between different recordings, a new ride starts when the time gap exceeds
+     -MaxGapSeconds (default 2h) OR you resumed more than -MaxGapMeters away (default 4km,
+     i.e. you relocated). Short in-place breaks stay one ride; a long wait or a drive to
+     another trailhead starts a new ride.
   3) Writes orchestrator_results.json summarizing all days processed.
 
 Requirements:
@@ -64,14 +64,12 @@ param(
   # If your date folders can contain subfolders with videos, enable this
   [switch] $RecurseVideos,
 
-  # Ride detection (passed to merge_gpxs.ps1). A new ride starts when the time gap
-  # between consecutive tracks exceeds -MaxGapSeconds (always), OR you paused longer
-  # than -MinGapSeconds AND resumed more than -MaxGapMeters from where you stopped.
-  # This keeps a mid-ride stop (resumed in place) as one ride, while splitting
-  # genuinely separate rides. Chapters of one recording have ~no gap and stay together.
-  [int] $MaxGapSeconds = 3600,    # 1 hour
-  [int] $MinGapSeconds = 120,     # 2 minutes
-  [double] $MaxGapMeters = 500.0, # 500 m
+  # Ride detection (passed to merge_gpxs.ps1). Chapters of one GoPro recording are always
+  # kept together; between DIFFERENT recordings a new ride starts when the time gap
+  # exceeds -MaxGapSeconds OR you resumed more than -MaxGapMeters away (you relocated).
+  # Short in-place breaks stay one ride; a long wait or a big move starts a new ride.
+  [int] $MaxGapSeconds = 7200,     # 2 hours
+  [double] $MaxGapMeters = 4000.0, # 4 km
 
   # By default, each date's previous output (the .gpx and *_results.json files in its
   # gpx_raw\ and gpx_day\) is wiped before re-processing, so re-runs leave no stale or
@@ -236,7 +234,6 @@ foreach ($dayDir in $dateFolders) {
         "-InDir", $rawOut,
         "-OutDir", $dayGpxOut,
         "-MaxGapSeconds", "$MaxGapSeconds",
-        "-MinGapSeconds", "$MinGapSeconds",
         "-MaxGapMeters",  "$MaxGapMeters"
       )
 

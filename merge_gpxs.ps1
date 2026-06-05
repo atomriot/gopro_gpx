@@ -3,16 +3,18 @@ GoPro GPX  --  merge_gpxs.ps1 (supplementary: merge per-ride routes)
 
 Merge GPX files in a folder into 1..N unified routes (“sessions”/rides) based on continuity.
 
-Heuristic (uses BOTH a time and a location differential so a stop mid-ride does not
-start a new ride, but resuming somewhere else does):
+Heuristic (time + distance, with GoPro chapter awareness):
 - Sort GPX files by first trackpoint time
-- Start a new session when ANY of:
+- Chapters of the SAME recording (same GoPro file number, e.g. GX01_0487_, GX02_0487_)
+  are always kept together -- never split.
+- Between DIFFERENT recordings, start a new ride when ANY of:
   - the tracks are out of order (next starts >5s before prev ends), OR
-  - the time gap (end of prev -> start of next) exceeds -MaxGapSeconds (default 3600s = 1h),
-    i.e. a long gap is always a new ride even if you restart from the same place, OR
-  - you PAUSED and MOVED: the time gap exceeds -MinGapSeconds (default 120s) AND the
-    distance between where you stopped and where you resumed exceeds -MaxGapMeters
-    (default 500m). A short stop where you resume in place stays one ride.
+  - the time gap (end of prev -> start of next) exceeds -MaxGapSeconds (default 7200s = 2h)
+    -- i.e. a long wait, even at the same spot, OR
+  - you resumed more than -MaxGapMeters away (default 4000m) -- i.e. you physically
+    relocated (e.g. drove to another trailhead), not just paused along the route.
+  A pause where you keep riding nearby stays one ride. NOTE: two distinct rides at the
+  SAME place within the time window can't be separated automatically -- that's a manual edit.
 
 Output:
 - Writes merged GPX per session: merged_route_YYYYMMDD_HHMMSS_sessionNN.gpx
@@ -31,9 +33,8 @@ param(
 
   [string] $OutDir = "",
 
-  [int] $MaxGapSeconds = 3600,    # 1 hour: a gap longer than this ALWAYS starts a new ride
-  [int] $MinGapSeconds = 120,     # 2 min: minimum pause before a "moved away" split applies
-  [double] $MaxGapMeters = 500.0, # 500 m: resumed this far from where you stopped (after a pause) = new ride
+  [int] $MaxGapSeconds = 7200,     # 2 hours: a time gap longer than this starts a new ride
+  [double] $MaxGapMeters = 4000.0, # 4 km: resuming this far away = you relocated = new ride
   [switch] $Recurse
 )
 
@@ -239,23 +240,24 @@ for ($i=1; $i -lt $valid.Length; $i++) {
   $next = $valid[$i]
 
   $gapSec = [double]($next.startTime - $prev.endTime).TotalSeconds
-  $gapM = HaversineMeters $prev.endLat $prev.endLon $next.startLat $next.startLon
 
   # GoPro splits ONE continuous recording into ~4GB chapters that share the same file
   # number (e.g. GX01_0487_, GX02_0487_, GX03_0487_). Those are seamless, so they must
-  # never be split -- even if GPS cleaning left a gap at a chapter boundary (a dropout
-  # mid-ride can look like a "paused and moved away"). Only DIFFERENT recordings are
-  # candidates for a new ride.
+  # never be split -- even if GPS cleaning left a gap at a chapter boundary. Only
+  # DIFFERENT recordings are candidates for a new ride.
   $recPrev = Get-RecordingId $prev.path
   $recNext = Get-RecordingId $next.path
   $sameRecording = ($null -ne $recPrev) -and ($recPrev -eq $recNext)
 
-  # New ride only when it's a different recording AND: out of order, OR a long time gap
-  # (always), OR a real pause where you also moved away (time AND location together).
+  # New ride between different recordings when there's a long TIME gap (a wait) OR a
+  # large DISTANCE gap (you relocated, e.g. drove to another trailhead). A short pause
+  # where you resume nearby stays one ride. The distance threshold is deliberately large
+  # (~4 km) so an in-place break or GPS warmup never trips it; only a real relocation does.
+  $gapM = HaversineMeters $prev.endLat $prev.endLon $next.startLat $next.startLon
   $newSession = (-not $sameRecording) -and (
                   ($gapSec -lt -5) -or
                   ($gapSec -gt $MaxGapSeconds) -or
-                  (($gapSec -gt $MinGapSeconds) -and ($gapM -gt $MaxGapMeters))
+                  ($gapM -gt $MaxGapMeters)
                 )
 
   if ($newSession) {
@@ -318,7 +320,6 @@ $report = [ordered]@{
   inDir = (Resolve-Path -LiteralPath $InDir).Path
   outDir = $outRoot
   maxGapSeconds = $MaxGapSeconds
-  minGapSeconds = $MinGapSeconds
   maxGapMeters = $MaxGapMeters
   totalGpxFilesFound = $files.Length
   totalUsableGpxFiles = $valid.Length
