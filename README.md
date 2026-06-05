@@ -25,6 +25,7 @@ they don't exist. Read [Requirements](#requirements) first, then
 | [`process_footage.ps1`](process_footage.ps1) | **Main entry point.** Walks a root folder of `MM-DD-YYYY` date folders and, for each day, runs the extractor on every video and merges the results into one GPX per ride. This is the one you normally run. |
 | [`gopro_telemetry.ps1`](gopro_telemetry.ps1) | *Supplementary.* Extracts GPS from `.MP4`/`.MOV` files into per-video `.gpx`. Called automatically by `process_footage.ps1`; run it directly only to process a single file/folder. |
 | [`merge_gpxs.ps1`](merge_gpxs.ps1) | *Supplementary.* Merges a folder of `.gpx` files into one route per ride. Also called automatically by `process_footage.ps1`. |
+| [`gpx_accuracy_report.ps1`](gpx_accuracy_report.ps1) | *Diagnostic (optional).* Inspects one video's GPS quality and writes an HTML report (precision/speed charts, map, % usable). Run ad hoc when a ride looks wrong. See [its README](gpx_accuracy_report_README.md). |
 
 The data flows like this:
 

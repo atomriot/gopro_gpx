@@ -6,4 +6,7 @@ merged/
 # Auto-downloaded ExifTool cache
 **/.tools/
 
+# Accuracy diagnostic reports (generated HTML)
+*_accuracy.html
+
 debug.log
